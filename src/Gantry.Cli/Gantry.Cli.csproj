@@ -6,6 +6,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
     <PackageReference Include="Serilog" Version="3.1.1" />
@@ -27,6 +31,12 @@
     <Version>1.0.0</Version>
     <Authors>coretravis</Authors>
     <Description>Server provisioning and CI/CD generation CLI for .NET applications</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/coretravis/Gantry</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/coretravis/Gantry</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>dotnet;deployment;digitalocean;devops;cli</PackageTags>
   </PropertyGroup>
 
 </Project>
