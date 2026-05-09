@@ -1,0 +1,82 @@
+name: Deploy {{app_name}} to {{server_host}}
+
+on:
+  push:
+    branches:
+      - {{branch}}
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET {{runtime_version}}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '{{runtime_version}}'
+
+      - name: Restore dependencies
+        run: dotnet restore {{project_path}}
+
+      - name: Build
+        run: dotnet build {{project_path}} --no-restore --configuration Release
+
+      {{run_tests_step}}
+
+      - name: Publish
+        run: dotnet publish {{project_path}} -c Release -o ./publish --runtime linux-x64 --self-contained false
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-publish
+          path: ./publish
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment: Production
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-publish
+          path: ./publish
+
+      - name: Copy files to server
+        uses: {{scp_action}}
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          source: "publish/"
+          target: "{{deploy_path}}"
+          strip_components: 1
+          rm: true
+
+      - name: Restart service
+        uses: {{ssh_action}}
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: sudo systemctl restart {{service_name}}.service
+
+      - name: Health check
+        run: |
+          echo "Waiting for service to start..."
+          sleep 10
+          for i in $(seq 1 {{health_check_retries}}); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" {{health_check_url}} || echo "000")
+            echo "Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Health check failed after {{health_check_retries}} attempts"
+          exit 1

@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/docs/">
+    <File Path="docs/plugin-developer-guide.md" />
+    <File Path="docs/user-guide.md" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Gantry.Cli/Gantry.Cli.csproj" />
+    <Project Path="src/Gantry.Core/Gantry.Core.csproj" />
+    <Project Path="src/Gantry.Infrastructure/Gantry.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Gantry.Cli.Tests/Gantry.Cli.Tests.csproj" />
+    <Project Path="tests/Gantry.Core.Tests/Gantry.Core.Tests.csproj" />
+    <Project Path="tests/Gantry.Infrastructure.Tests/Gantry.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>
