@@ -1,3 +1,5 @@
+![Build Status](https://github.com/coretravis/Gantry/actions/workflows/build.yml/badge.svg)
+
 # Gantry
 
 I wanted to deploy a .NET Razor Pages app as a quick demo. On Azure, the cheapest plan that includes a custom domain and SSL came to nearly $60 a month. The same thing on a DigitalOcean droplet costs $6.
