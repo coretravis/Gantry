@@ -21,26 +21,34 @@ public class DeployCommandHandler
     private readonly IConfigService _configService;
     private readonly IEnumerable<IDeployHook> _deployHooks;
     private readonly ILogger<DeployCommandHandler> _logger;
+    private readonly Func<CancellationToken, Task<string>> _getSha;
 
     public DeployCommandHandler(
         ISshService ssh,
         IProcessManager processManager,
         IConfigService configService,
         IEnumerable<IDeployHook> deployHooks,
-        ILogger<DeployCommandHandler> logger)
+        ILogger<DeployCommandHandler> logger,
+        Func<CancellationToken, Task<string>>? getSha = null)
     {
         _ssh = ssh;
         _processManager = processManager;
         _configService = configService;
         _deployHooks = deployHooks;
         _logger = logger;
+        _getSha = getSha ?? GetGitShortShaAsync;
     }
 
     public async Task<int> ExecuteAsync(string configPath, bool dryRun, CancellationToken ct = default)
     {
         var config = _configService.Load(configPath);
         var sw = Stopwatch.StartNew();
-        var releaseId = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss");
+
+        var sha = await _getSha(ct);
+        var timestamp = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss");
+        var releaseId = sha.Length > 0 ? $"{sha}-{timestamp}" : timestamp;
+        if (sha.Length == 0)
+            _logger.LogWarning("Git SHA unavailable; using timestamp-only release ID");
 
         _logger.LogInformation("Starting deploy release {ReleaseId}", releaseId);
 
@@ -236,6 +244,31 @@ public class DeployCommandHandler
         catch { }
 
         return projectPath;
+    }
+
+    private static async Task<string> GetGitShortShaAsync(CancellationToken ct)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("git", "rev-parse --short HEAD")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var proc = Process.Start(psi);
+            if (proc is null) return string.Empty;
+
+            var sha = (await proc.StandardOutput.ReadToEndAsync(ct)).Trim();
+            await proc.WaitForExitAsync(ct);
+
+            return proc.ExitCode == 0 && sha.Length > 0 ? sha : string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
 
     private static void ValidatePublishOutput(string publishDir, Core.Models.DeployConfig config)
