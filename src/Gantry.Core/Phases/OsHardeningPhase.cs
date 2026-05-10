@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Gantry.Core.Interfaces;
 using Gantry.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -79,15 +80,29 @@ public class OsHardeningPhase : PhaseBase
     private async Task HardenSshAsync(ProvisioningContext context, CancellationToken ct)
     {
         const string sshdConfig = "/etc/ssh/sshd_config";
-        var commands = new[]
+
+        if (context.IsDryRun)
         {
-            $"sed -i 's/^#\\?PasswordAuthentication.*/PasswordAuthentication no/' {sshdConfig}",
-            $"sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin prohibit-password/' {sshdConfig}",
-            $"sed -i 's/^#\\?PubkeyAuthentication.*/PubkeyAuthentication yes/' {sshdConfig}",
-            "systemctl reload ssh"
-        };
-        foreach (var cmd in commands)
-            await RunCommandAsync(_ssh, cmd, context, ct: ct);
+            Logger.LogDebug("[dry-run] Would harden {File}", sshdConfig);
+            return;
+        }
+
+        var current = await _ssh.DownloadStringAsync(sshdConfig, ct);
+
+        var hardened = Regex.Replace(current,  @"^#?\s*PasswordAuthentication\s+\S+", "PasswordAuthentication no",          RegexOptions.Multiline);
+        hardened     = Regex.Replace(hardened, @"^#?\s*PermitRootLogin\s+\S+",        "PermitRootLogin prohibit-password",   RegexOptions.Multiline);
+        hardened     = Regex.Replace(hardened, @"^#?\s*PubkeyAuthentication\s+\S+",   "PubkeyAuthentication yes",            RegexOptions.Multiline);
+
+        var changed = await UploadIfChangedAsync(_ssh, hardened, sshdConfig, context, ct);
+        if (changed)
+        {
+            await RunCommandAsync(_ssh, "systemctl reload ssh", context, ct: ct);
+            Logger.LogDebug("SSH config hardened and sshd reloaded");
+        }
+        else
+        {
+            Logger.LogDebug("SSH config already hardened, skipping reload");
+        }
     }
 
     private async Task ConfigureFirewallAsync(ProvisioningContext context, CancellationToken ct)
