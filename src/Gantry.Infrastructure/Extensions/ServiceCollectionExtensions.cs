@@ -10,6 +10,7 @@ using Gantry.Infrastructure.ProcessManagers;
 using Gantry.Infrastructure.Runtimes;
 using Gantry.Infrastructure.SslProviders;
 using Gantry.Infrastructure.Ssh;
+using Gantry.Infrastructure.State;
 using Gantry.Infrastructure.Templates;
 using Gantry.Infrastructure.WebServers;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +23,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<ISshService, SshService>();
         services.AddSingleton<IConfigService, ConfigService>();
+        services.AddTransient<IStateService, StateService>();
         services.AddTransient<IGithubService, GithubService>();
         services.AddSingleton<ITemplateEngine, TemplateEngine>();
         services.AddSingleton<DeployConfigValidator>();

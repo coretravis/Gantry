@@ -12,6 +12,7 @@ public class DeployCommandTests
     private readonly Mock<ISshService> _ssh = new();
     private readonly Mock<IProcessManager> _processManager = new();
     private readonly Mock<IConfigService> _configService = new();
+    private readonly Mock<IStateService> _stateService = new();
     private readonly CapturingLogger<DeployCommandHandler> _logger = new();
 
     public DeployCommandTests()
@@ -28,6 +29,7 @@ public class DeployCommandTests
         IEnumerable<IPreDeployHook>? preDeployHooks = null,
         IEnumerable<IDeployHook>? deployHooks = null) =>
         new(_ssh.Object, _processManager.Object, _configService.Object,
+            _stateService.Object,
             preDeployHooks ?? Enumerable.Empty<IPreDeployHook>(),
             deployHooks ?? Enumerable.Empty<IDeployHook>(),
             _logger, getSha);

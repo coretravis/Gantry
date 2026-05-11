@@ -19,6 +19,7 @@ public class DeployCommandHandler
     private readonly ISshService _ssh;
     private readonly IProcessManager _processManager;
     private readonly IConfigService _configService;
+    private readonly IStateService _stateService;
     private readonly IEnumerable<IPreDeployHook> _preDeployHooks;
     private readonly IEnumerable<IDeployHook> _deployHooks;
     private readonly ILogger<DeployCommandHandler> _logger;
@@ -28,6 +29,7 @@ public class DeployCommandHandler
         ISshService ssh,
         IProcessManager processManager,
         IConfigService configService,
+        IStateService stateService,
         IEnumerable<IPreDeployHook> preDeployHooks,
         IEnumerable<IDeployHook> deployHooks,
         ILogger<DeployCommandHandler> logger,
@@ -36,6 +38,7 @@ public class DeployCommandHandler
         _ssh = ssh;
         _processManager = processManager;
         _configService = configService;
+        _stateService = stateService;
         _preDeployHooks = preDeployHooks;
         _deployHooks = deployHooks;
         _logger = logger;
@@ -78,6 +81,18 @@ public class DeployCommandHandler
             await RestartServiceAsync(config, dryRun, ct);
             await RunDeployHooksAsync(config, dryRun, ct);
             await HealthCheckAsync(config, dryRun, ct);
+
+            if (!dryRun)
+            {
+                var state = await _stateService.ReadAsync(_ssh, config.App.Name, ct);
+                state.CurrentRelease = releaseId;
+                state.GantryVersion = "1.0.0";
+                await _stateService.WriteAsync(_ssh, config.App.Name, state, ct);
+            }
+            else
+            {
+                _logger.LogDebug("[dry-run] Would write state file with release {ReleaseId}", releaseId);
+            }
 
             sw.Stop();
             ConsoleRenderer.ShowSuccess($"Deploy complete in {sw.Elapsed.TotalSeconds:F1}s");

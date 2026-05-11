@@ -20,6 +20,7 @@ public class PluginCommandHandler
     private readonly IPhaseOrchestrator _orchestrator;
     private readonly IConfigService _configService;
     private readonly ISshService _ssh;
+    private readonly IStateService _stateService;
     private readonly ILogger<PluginCommandHandler> _logger;
 
     public PluginCommandHandler(
@@ -27,19 +28,41 @@ public class PluginCommandHandler
         IPhaseOrchestrator orchestrator,
         IConfigService configService,
         ISshService ssh,
+        IStateService stateService,
         ILogger<PluginCommandHandler> logger)
     {
         _phases = phases;
         _orchestrator = orchestrator;
         _configService = configService;
         _ssh = ssh;
+        _stateService = stateService;
         _logger = logger;
     }
 
-    public Task<int> ListAsync(string configPath, CancellationToken ct = default)
+    public async Task<int> ListAsync(string configPath, CancellationToken ct = default)
     {
         DeployConfig? config = null;
         try { config = _configService.Load(configPath); } catch { /* config may not exist */ }
+
+        var state = new GantryState();
+        if (config != null)
+        {
+            try
+            {
+                var server = config.Server;
+                var expandedKey = server.SshKeyPath.Replace("~", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+                await _ssh.ConnectAsync(server.Host, server.SshUser, expandedKey, server.Port, ct);
+                state = await _stateService.ReadAsync(_ssh, config.App.Name, ct);
+            }
+            catch
+            {
+                // SSH unavailable, degrade to config-only view
+            }
+            finally
+            {
+                await _ssh.DisposeAsync();
+            }
+        }
 
         AnsiConsole.WriteLine();
         AnsiConsole.Write(new Rule("[bold]Available Plugins[/]").LeftJustified());
@@ -47,13 +70,36 @@ public class PluginCommandHandler
         var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey);
         table.AddColumn("[bold]Plugin[/]");
         table.AddColumn("[bold]Description[/]");
-        table.AddColumn("[bold]Status[/]");
+        table.AddColumn("[bold]Config[/]");
+        table.AddColumn("[bold]Server[/]");
 
         foreach (var (name, meta) in PluginRegistry.All)
         {
             var enabled = config?.GetPlugin(name).IsEnabled ?? false;
-            var (mark, color) = enabled ? ("enabled", "green") : ("disabled", "grey");
-            table.AddRow(meta.Name, meta.Description, $"[{color}]{mark}[/]");
+            var (configMark, configColor) = enabled ? ("enabled", "green") : ("disabled", "grey");
+
+            string serverMark;
+            string serverColor;
+            if (state.Plugins.TryGetValue(name, out var installed))
+            {
+                if (installed.Installed)
+                {
+                    serverMark = string.IsNullOrEmpty(installed.Version) ? "installed" : $"installed v{installed.Version}";
+                    serverColor = "green";
+                }
+                else
+                {
+                    serverMark = "not installed";
+                    serverColor = "grey";
+                }
+            }
+            else
+            {
+                serverMark = "unknown";
+                serverColor = "grey";
+            }
+
+            table.AddRow(meta.Name, meta.Description, $"[{configColor}]{configMark}[/]", $"[{serverColor}]{serverMark}[/]");
         }
 
         AnsiConsole.Write(table);
@@ -62,7 +108,7 @@ public class PluginCommandHandler
         ConsoleRenderer.ShowInfo("To disable a plugin: gantry plugin remove <name>");
         AnsiConsole.WriteLine();
 
-        return Task.FromResult(0);
+        return 0;
     }
 
     public async Task<int> AddAsync(string pluginName, string configPath, bool dryRun, string[] setOptions, CancellationToken ct = default)
@@ -134,7 +180,21 @@ public class PluginCommandHandler
             await _orchestrator.RunAsync(context, skipPhases, ct);
 
             if (!dryRun)
+            {
                 _configService.Save(config, configPath);
+                var state = await _stateService.ReadAsync(_ssh, config.App.Name, ct);
+                state.Plugins[pluginName] = new InstalledPlugin
+                {
+                    Installed = true,
+                    Version = metadata.DefaultVersion,
+                    InstalledAt = DateTimeOffset.UtcNow
+                };
+                await _stateService.WriteAsync(_ssh, config.App.Name, state, ct);
+            }
+            else
+            {
+                _logger.LogDebug("[dry-run] Would write state file with plugin {PluginName} installed", pluginName);
+            }
 
             ConsoleRenderer.ShowSuccess($"Plugin '{pluginName}' enabled and configured.");
             AnsiConsole.WriteLine();
@@ -208,7 +268,16 @@ public class PluginCommandHandler
         config.Plugins?.Remove(pluginName);
 
         if (!dryRun)
+        {
             _configService.Save(config, configPath);
+            var state = await _stateService.ReadAsync(_ssh, config.App.Name, ct);
+            state.Plugins[pluginName] = new InstalledPlugin { Installed = false };
+            await _stateService.WriteAsync(_ssh, config.App.Name, state, ct);
+        }
+        else
+        {
+            _logger.LogDebug("[dry-run] Would write state file with plugin {PluginName} removed", pluginName);
+        }
 
         ConsoleRenderer.ShowSuccess($"Plugin '{pluginName}' removed.");
         await _ssh.DisposeAsync();
