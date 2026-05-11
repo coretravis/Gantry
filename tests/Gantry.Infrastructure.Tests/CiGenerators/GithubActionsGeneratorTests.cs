@@ -108,4 +108,37 @@ public class GithubActionsGeneratorTests
         var config = BuildConfig();
         _sut.GetWorkflowPath(config).Should().Be(".github/workflows/deploy.yml");
     }
+
+    [Fact]
+    public void GeneratedWorkflow_UsesReleasesDirectory_NotAppDirectory()
+    {
+        var config = BuildConfig();
+        var workflow = _sut.GenerateWorkflow(config);
+        workflow.Should().Contain("/var/www/my-app/releases/");
+    }
+
+    [Fact]
+    public void GeneratedWorkflow_ContainsSymlinkActivationStep()
+    {
+        var config = BuildConfig();
+        var workflow = _sut.GenerateWorkflow(config);
+        workflow.Should().Contain("ln -sfn");
+    }
+
+    [Fact]
+    public void GeneratedWorkflow_PrunesReleasesUsingConfiguredCount()
+    {
+        var config = BuildConfig();
+        config.App.ReleasesToKeep = 5;
+        var workflow = _sut.GenerateWorkflow(config);
+        workflow.Should().Contain("tail -n +$((5 + 1))");
+    }
+
+    [Fact]
+    public void GeneratedWorkflow_DoesNotReferenceDeprecatedAppPath()
+    {
+        var config = BuildConfig();
+        var workflow = _sut.GenerateWorkflow(config);
+        workflow.Should().NotContain("/var/www/my-app/app");
+    }
 }

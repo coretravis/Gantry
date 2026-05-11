@@ -6,10 +6,6 @@ namespace Gantry.Infrastructure.CiGenerators;
 
 public class GithubActionsGenerator : ICiGenerator
 {
-    // Pin third-party actions to specific versions. Update here when upgrading.
-    private const string ScpAction = "appleboy/scp-action@v0.1.7";
-    private const string SshAction = "appleboy/ssh-action@v1.0.3";
-
     private readonly ITemplateEngine _templates;
     private readonly ILogger<GithubActionsGenerator> _logger;
 
@@ -31,9 +27,9 @@ public class GithubActionsGenerator : ICiGenerator
             ? $"https://{config.Domain.Name}{config.App.HealthCheckPath}"
             : $"http://{config.Server.Host}:{config.App.Port}{config.App.HealthCheckPath}";
 
-        var runTestsStep = config.Ci.RunTests
-            ? "- name: Test\n        run: dotnet test --no-build --configuration Release"
-            : string.Empty;
+        var (testStepName, testStepRun) = config.Ci.RunTests
+            ? ("Test", "dotnet test --no-build --configuration Release")
+            : ("Skip tests", "echo 'Tests disabled'");
 
         var tokens = new Dictionary<string, string>
         {
@@ -46,9 +42,9 @@ public class GithubActionsGenerator : ICiGenerator
             ["service_name"] = config.App.Name,
             ["health_check_url"] = healthCheckUrl,
             ["health_check_retries"] = "6",
-            ["run_tests_step"] = runTestsStep,
-            ["scp_action"] = ScpAction,
-            ["ssh_action"] = SshAction
+            ["releases_to_keep"] = config.App.ReleasesToKeep.ToString(),
+            ["test_step_name"] = testStepName,
+            ["test_step_run"] = testStepRun
         };
 
         var workflow = _templates.Render("github-actions.yml", tokens);
