@@ -4,7 +4,9 @@ public record PluginMetadata(
     string Name,
     string Description,
     string DefaultVersion,
-    string ConfigExample);
+    string ConfigExample,
+    IReadOnlyList<string> RequiredPhases,
+    IReadOnlyList<string> SupportedOsVersions);
 
 /// <summary>Static catalogue of all known Gantry plugins. Used by <c>gantry plugin list</c>.</summary>
 public static class PluginRegistry
@@ -24,6 +26,8 @@ public static class PluginRegistry
                     user: myapp_user
                     # run_migrations: "true"
                     # migration_command: "dotnet myapp.dll migrate"
-                  """),
+                  """,
+                RequiredPhases: ["os-hardening", "runtime-installation", "process-manager-setup"],
+                SupportedOsVersions: ["22.04", "24.04"]),
         };
 }
