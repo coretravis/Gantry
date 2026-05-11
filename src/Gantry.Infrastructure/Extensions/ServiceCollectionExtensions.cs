@@ -46,7 +46,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IPhase, PostgresInstallPhase>();
         services.AddTransient<IPhase, PostgresConfigurePhase>();
         services.AddTransient<IStatusContributor, PostgresStatusContributor>();
-        services.AddTransient<IDeployHook, PostgresMigrationHook>();
+        services.AddTransient<IPreDeployHook, PostgresMigrationHook>();
 
         services.AddTransient<IPhaseOrchestrator, PhaseOrchestrator>();
 

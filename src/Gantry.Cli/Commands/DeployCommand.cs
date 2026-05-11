@@ -19,6 +19,7 @@ public class DeployCommandHandler
     private readonly ISshService _ssh;
     private readonly IProcessManager _processManager;
     private readonly IConfigService _configService;
+    private readonly IEnumerable<IPreDeployHook> _preDeployHooks;
     private readonly IEnumerable<IDeployHook> _deployHooks;
     private readonly ILogger<DeployCommandHandler> _logger;
     private readonly Func<CancellationToken, Task<string>> _getSha;
@@ -27,6 +28,7 @@ public class DeployCommandHandler
         ISshService ssh,
         IProcessManager processManager,
         IConfigService configService,
+        IEnumerable<IPreDeployHook> preDeployHooks,
         IEnumerable<IDeployHook> deployHooks,
         ILogger<DeployCommandHandler> logger,
         Func<CancellationToken, Task<string>>? getSha = null)
@@ -34,6 +36,7 @@ public class DeployCommandHandler
         _ssh = ssh;
         _processManager = processManager;
         _configService = configService;
+        _preDeployHooks = preDeployHooks;
         _deployHooks = deployHooks;
         _logger = logger;
         _getSha = getSha ?? GetGitShortShaAsync;
@@ -71,6 +74,7 @@ public class DeployCommandHandler
 
             await SnapshotCurrentReleaseAsync(config, releaseId, deployPath, dryRun, ct);
             await TransferFilesAsync(publishDir, deployPath, config, dryRun, ct);
+            await RunPreDeployHooksAsync(config, dryRun, ct);
             await RestartServiceAsync(config, dryRun, ct);
             await RunDeployHooksAsync(config, dryRun, ct);
             await HealthCheckAsync(config, dryRun, ct);
@@ -286,6 +290,21 @@ public class DeployCommandHandler
         await using var fileStream = File.Create(archivePath);
         await using var gzip = new System.IO.Compression.GZipStream(fileStream, System.IO.Compression.CompressionMode.Compress);
         await System.Formats.Tar.TarFile.CreateFromDirectoryAsync(sourceDir, gzip, includeBaseDirectory: false, cancellationToken: ct);
+    }
+
+    private async Task RunPreDeployHooksAsync(Core.Models.DeployConfig config, bool dryRun, CancellationToken ct)
+    {
+        foreach (var hook in _preDeployHooks)
+        {
+            var pluginConfig = config.GetPlugin(hook.PluginName);
+            if (!pluginConfig.IsEnabled) continue;
+
+            _logger.LogInformation("Running pre-deploy hook for plugin '{Plugin}'", hook.PluginName);
+            if (!dryRun)
+                await hook.RunAsync(_ssh, config, ct);
+            else
+                _logger.LogDebug("[dry-run] Would run pre-deploy hook for plugin '{Plugin}'", hook.PluginName);
+        }
     }
 
     private async Task RunDeployHooksAsync(Core.Models.DeployConfig config, bool dryRun, CancellationToken ct)

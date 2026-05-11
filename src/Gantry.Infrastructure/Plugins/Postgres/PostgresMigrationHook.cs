@@ -10,7 +10,7 @@ namespace Gantry.Infrastructure.Plugins.Postgres;
 /// Disabled by default. Enable by setting run_migrations=true and migration_command
 /// in the postgres plugin config in .deploy.yml.
 /// </summary>
-public class PostgresMigrationHook : IDeployHook
+public class PostgresMigrationHook : IPreDeployHook
 {
     private readonly ILogger<PostgresMigrationHook> _logger;
 
