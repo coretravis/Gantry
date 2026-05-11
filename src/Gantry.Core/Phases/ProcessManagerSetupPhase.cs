@@ -35,12 +35,38 @@ public class ProcessManagerSetupPhase : PhaseBase
 
     protected override async Task RunAsync(ProvisioningContext context, CancellationToken ct)
     {
-        Report(context, PhaseStatus.Running, $"Creating deploy directory /var/www/{context.Config.App.Name}...");
+        var appName = context.Config.App.Name;
+        var deployUser = context.Config.Server.DeployUser;
+
+        if (!context.IsDryRun)
+        {
+            var hasOldLayout = await _ssh.DirectoryExistsAsync($"/var/www/{appName}/app", ct);
+            var checkResult = await _ssh.ExecuteAsync(
+                $"test -L /var/www/{appName}/current && echo yes || echo no", ct: ct);
+            var hasCurrentLink = checkResult.Stdout.Trim() == "yes";
+
+            if (hasOldLayout && !hasCurrentLink)
+            {
+                Report(context, PhaseStatus.Running, "Migrating to symlink release layout...");
+                var migrationId = $"pre-symlink-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}";
+                await RunCommandAsync(_ssh,
+                    $"mv /var/www/{appName}/app /var/www/{appName}/releases/{migrationId} && " +
+                    $"ln -sfn /var/www/{appName}/releases/{migrationId} /var/www/{appName}/current && " +
+                    $"mkdir -p /var/www/{appName}/shared && " +
+                    $"mv /var/www/{appName}/.env /var/www/{appName}/shared/.env 2>/dev/null || true",
+                    context, ct: ct);
+            }
+        }
+
+        Report(context, PhaseStatus.Running, $"Creating deploy directory /var/www/{appName}...");
         await RunCommandAsync(_ssh,
-            $"mkdir -p /var/www/{context.Config.App.Name}/app /var/www/{context.Config.App.Name}/releases && chown -R {context.Config.Server.DeployUser}:{context.Config.Server.DeployUser} /var/www/{context.Config.App.Name}",
+            $"mkdir -p /var/www/{appName}/releases /var/www/{appName}/shared && " +
+            $"touch /var/www/{appName}/shared/.env && " +
+            $"chmod 600 /var/www/{appName}/shared/.env && " +
+            $"chown -R {deployUser}:{deployUser} /var/www/{appName}",
             context, ct: ct);
 
-        Report(context, PhaseStatus.Running, $"Creating systemd service for {context.Config.App.Name}...");
+        Report(context, PhaseStatus.Running, $"Creating systemd service for {appName}...");
         await _processManager.CreateServiceAsync(_ssh, context.Config, context.IsDryRun, ct);
     }
 

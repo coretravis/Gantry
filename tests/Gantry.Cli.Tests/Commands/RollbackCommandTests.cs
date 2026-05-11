@@ -22,10 +22,7 @@ public class RollbackCommandTests
             App = new AppConfig { Name = "test-app" }
         });
 
-        _ssh.Setup(s => s.ExecuteAsync(
-                It.Is<string>(cmd => cmd.StartsWith("cp")),
-                It.IsAny<TimeSpan?>(),
-                It.IsAny<CancellationToken>()))
+        _ssh.Setup(s => s.ExecuteAsync(It.IsAny<string>(), It.IsAny<TimeSpan?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CommandResult { ExitCode = 0 });
     }
 
@@ -88,6 +85,82 @@ public class RollbackCommandTests
         result.Should().Be(0);
         _processManager.Verify(
             p => p.StopAsync(It.IsAny<ISshService>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Rollback_UsesSymlinkSwap_NotFileCopy()
+    {
+        const string prevRelease = "abc1234-20250510-130000";
+        const string currRelease = "def5678-20250510-143022";
+
+        _stateService
+            .Setup(s => s.ReadAsync(_ssh.Object, "test-app", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GantryState { CurrentRelease = currRelease });
+
+        _ssh.Setup(s => s.ExecuteAsync(
+                It.Is<string>(cmd => cmd.StartsWith("ls")),
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CommandResult
+            {
+                ExitCode = 0,
+                Stdout = $"/var/www/test-app/releases/{currRelease}/\n/var/www/test-app/releases/{prevRelease}/\n"
+            });
+
+        _processManager
+            .Setup(p => p.IsActiveAsync(_ssh.Object, "test-app", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await CreateSut().ExecuteAsync(".deploy.yml", prevRelease);
+
+        result.Should().Be(0);
+        _ssh.Verify(
+            s => s.ExecuteAsync(
+                It.Is<string>(cmd => cmd.Contains("ln -sfn") && cmd.Contains(prevRelease)),
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _ssh.Verify(
+            s => s.ExecuteAsync(
+                It.Is<string>(cmd => cmd.Contains("cp -r")),
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Rollback_UpdatesStateFileCurrentRelease()
+    {
+        const string prevRelease = "abc1234-20250510-130000";
+        const string currRelease = "def5678-20250510-143022";
+
+        _stateService
+            .Setup(s => s.ReadAsync(_ssh.Object, "test-app", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GantryState { CurrentRelease = currRelease });
+
+        _ssh.Setup(s => s.ExecuteAsync(
+                It.Is<string>(cmd => cmd.StartsWith("ls")),
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CommandResult
+            {
+                ExitCode = 0,
+                Stdout = $"/var/www/test-app/releases/{currRelease}/\n/var/www/test-app/releases/{prevRelease}/\n"
+            });
+
+        _processManager
+            .Setup(p => p.IsActiveAsync(_ssh.Object, "test-app", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        await CreateSut().ExecuteAsync(".deploy.yml", prevRelease);
+
+        _stateService.Verify(
+            s => s.WriteAsync(
+                _ssh.Object,
+                "test-app",
+                It.Is<GantryState>(state => state.CurrentRelease == prevRelease),
+                It.IsAny<CancellationToken>()),
             Times.Once);
     }
 }

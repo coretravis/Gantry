@@ -20,13 +20,11 @@ public class SystemdProcessManager : IProcessManager
     {
         var app = config.App;
         var server = config.Server;
-        var deployPath = string.IsNullOrWhiteSpace(app.DeployPath)
-            ? $"/var/www/{app.Name}/app"
-            : app.DeployPath;
+        var deployPath = $"/var/www/{app.Name}/current";
 
         var assemblyName = Path.GetFileNameWithoutExtension(app.ProjectPath) is { Length: > 0 } n ? n : app.Name;
         var dotnetExec = "/usr/bin/dotnet";
-        var envFilePath = $"/var/www/{app.Name}/.env";
+        var envFilePath = $"/var/www/{app.Name}/shared/.env";
 
         var envVars = config.Environment
             .Select(kv => $"Environment={kv.Key}={kv.Value}")
@@ -97,8 +95,9 @@ public class SystemdProcessManager : IProcessManager
                 await ssh.ExecuteAsync($"chmod 440 {sudoersPath}", ct: ct);
             }
 
-            // Create the secrets env file only if it doesn't already exist
+            // Create shared/ and the secrets env file only if they don't already exist
             await ssh.ExecuteAsync(
+                $"mkdir -p /var/www/{app.Name}/shared && " +
                 $"[ -f {envFilePath} ] || (touch {envFilePath} && chmod 600 {envFilePath} && chown {server.DeployUser}:{server.DeployUser} {envFilePath})",
                 ct: ct);
 

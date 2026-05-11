@@ -70,8 +70,8 @@ public class PostgresConfigurePhase : PluginPhaseBase
             $"sudo -u postgres psql -c \"DROP USER IF EXISTS \\\"{pg.User}\\\";\" 2>/dev/null || true",
             ct: ct);
 
-        // Remove the connection string from .env so the app doesn't start with stale credentials
-        var envPath = $"/var/www/{config.App.Name}/.env";
+        // Remove the connection string from shared/.env so the app doesn't start with stale credentials
+        var envPath = $"/var/www/{config.App.Name}/shared/.env";
         var key = pg.ConnectionStringKey;
         try
         {
@@ -94,7 +94,7 @@ public class PostgresConfigurePhase : PluginPhaseBase
 
     private async Task<string?> TryGetExistingPasswordAsync(string appName, CancellationToken ct)
     {
-        var envPath = $"/var/www/{appName}/.env";
+        var envPath = $"/var/www/{appName}/shared/.env";
         try
         {
             if (!await _ssh.FileExistsAsync(envPath, ct)) return null;
@@ -181,13 +181,12 @@ public class PostgresConfigurePhase : PluginPhaseBase
         string password,
         CancellationToken ct)
     {
-        var envPath = $"/var/www/{config.App.Name}/.env";
+        var envPath = $"/var/www/{config.App.Name}/shared/.env";
         var key = pg.ConnectionStringKey;
         var value = $"Host=localhost;Port=5432;Database={pg.Database};Username={pg.User};Password={password}";
 
-        // Ensure the directory exists - postgres-configure (order 35) runs before
-        // process-manager-setup (order 50) which normally creates this directory.
-        await _ssh.ExecuteAsync($"mkdir -p /var/www/{config.App.Name}", ct: ct);
+        // postgres-configure (order 35) runs before process-manager-setup (order 50), so shared/ may not exist yet
+        await _ssh.ExecuteAsync($"mkdir -p /var/www/{config.App.Name}/shared", ct: ct);
 
         var lines = new List<string>();
         if (await _ssh.FileExistsAsync(envPath, ct))

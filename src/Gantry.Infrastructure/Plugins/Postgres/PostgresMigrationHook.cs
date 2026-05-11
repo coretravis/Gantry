@@ -37,9 +37,7 @@ public class PostgresMigrationHook : IPreDeployHook
             return;
         }
 
-        var deployPath = string.IsNullOrWhiteSpace(config.App.DeployPath)
-            ? $"/var/www/{config.App.Name}/app"
-            : config.App.DeployPath;
+        var deployPath = $"/var/www/{config.App.Name}/current";
 
         _logger.LogInformation("Running database migrations: {Command}", migrationCommand);
 

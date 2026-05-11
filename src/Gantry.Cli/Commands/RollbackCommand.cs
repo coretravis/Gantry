@@ -81,14 +81,12 @@ public class RollbackCommandHandler
             }
 
             var releasePath = $"{releasesDir}/{selectedRelease}";
-            var deployPath = string.IsNullOrWhiteSpace(config.App.DeployPath)
-                ? $"/var/www/{config.App.Name}/app"
-                : config.App.DeployPath;
+            var currentLink = $"/var/www/{config.App.Name}/current";
 
             ConsoleRenderer.ShowInfo($"Rolling back to release {selectedRelease}...");
 
             await _processManager.StopAsync(_ssh, config.App.Name, ct);
-            await _ssh.ExecuteAsync($"cp -r {releasePath}/. {deployPath}/", ct: ct);
+            await _ssh.ExecuteAsync($"ln -sfn {releasePath} {currentLink}", ct: ct);
             await _processManager.StartAsync(_ssh, config.App.Name, ct);
 
             await Task.Delay(3000, ct);
@@ -96,6 +94,9 @@ public class RollbackCommandHandler
             if (!isActive)
                 throw new GantryException($"Service did not start after rollback to {selectedRelease}.",
                     "Check logs: gantry status");
+
+            state.CurrentRelease = selectedRelease;
+            await _stateService.WriteAsync(_ssh, config.App.Name, state, ct);
 
             ConsoleRenderer.ShowSuccess($"Rolled back to {selectedRelease} successfully.");
             return 0;

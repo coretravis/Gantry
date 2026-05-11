@@ -167,7 +167,7 @@ public class EnvCommandHandler
         lines.Add($"{key}={value}");
     }
 
-    private static string EnvFilePath(string appName) => $"/var/www/{appName}/.env";
+    private static string EnvFilePath(string appName) => $"/var/www/{appName}/shared/.env";
 
     private async Task ConnectAsync(DeployConfig config, CancellationToken ct)
     {

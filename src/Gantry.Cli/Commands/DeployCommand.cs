@@ -71,13 +71,9 @@ public class DeployCommandHandler
             if (!dryRun)
                 await _ssh.ConnectAsync(server.Host, server.DeployUser, expandedKey, server.Port, ct);
 
-            var deployPath = string.IsNullOrWhiteSpace(config.App.DeployPath)
-                ? $"/var/www/{config.App.Name}/app"
-                : config.App.DeployPath;
-
-            await SnapshotCurrentReleaseAsync(config, releaseId, deployPath, dryRun, ct);
-            await TransferFilesAsync(publishDir, deployPath, config, dryRun, ct);
+            await TransferFilesAsync(publishDir, config, releaseId, dryRun, ct);
             await RunPreDeployHooksAsync(config, dryRun, ct);
+            await ActivateReleaseAsync(config, releaseId, dryRun, ct);
             await RestartServiceAsync(config, dryRun, ct);
             await RunDeployHooksAsync(config, dryRun, ct);
             await HealthCheckAsync(config, dryRun, ct);
@@ -93,6 +89,8 @@ public class DeployCommandHandler
             {
                 _logger.LogDebug("[dry-run] Would write state file with release {ReleaseId}", releaseId);
             }
+
+            await PruneOldReleasesAsync(config, dryRun, ct);
 
             sw.Stop();
             ConsoleRenderer.ShowSuccess($"Deploy complete in {sw.Elapsed.TotalSeconds:F1}s");
@@ -180,14 +178,6 @@ public class DeployCommandHandler
         return publishDir;
     }
 
-    private async Task SnapshotCurrentReleaseAsync(Core.Models.DeployConfig config, string releaseId, string deployPath, bool dryRun, CancellationToken ct)
-    {
-        if (dryRun) return;
-        var releasesPath = $"/var/www/{config.App.Name}/releases/{releaseId}";
-        await _ssh.ExecuteAsync($"mkdir -p {releasesPath} && cp -r {deployPath}/. {releasesPath}/ 2>/dev/null || true", ct: ct);
-        await PruneOldReleasesAsync(config, dryRun, ct);
-    }
-
     private async Task PruneOldReleasesAsync(Core.Models.DeployConfig config, bool dryRun, CancellationToken ct)
     {
         if (dryRun) return;
@@ -197,8 +187,9 @@ public class DeployCommandHandler
             ct: ct);
     }
 
-    private async Task TransferFilesAsync(string publishDir, string deployPath, Core.Models.DeployConfig config, bool dryRun, CancellationToken ct)
+    private async Task TransferFilesAsync(string publishDir, Core.Models.DeployConfig config, string releaseId, bool dryRun, CancellationToken ct)
     {
+        var stagingPath = $"/var/www/{config.App.Name}/releases/{releaseId}";
         await AnsiConsole.Status().StartAsync("Packing archive...", async ctx =>
         {
             if (!dryRun)
@@ -216,8 +207,8 @@ public class DeployCommandHandler
                     await _ssh.UploadFileAsync(archivePath, remoteTar, ct);
 
                     ctx.Status("Extracting on server...");
-                    await _ssh.ExecuteAsync($"mkdir -p {deployPath} && tar xzf {remoteTar} -C {deployPath} && rm -f {remoteTar}", ct: ct);
-                    _logger.LogInformation("Transferred {Size} archive to {DeployPath}", sizeStr, deployPath);
+                    await _ssh.ExecuteAsync($"mkdir -p {stagingPath} && tar xzf {remoteTar} -C {stagingPath} && rm -f {remoteTar}", ct: ct);
+                    _logger.LogInformation("Transferred {Size} archive to {StagingPath}", sizeStr, stagingPath);
                 }
                 finally
                 {
@@ -227,9 +218,22 @@ public class DeployCommandHandler
             }
             else
             {
-                _logger.LogDebug("[dry-run] Would transfer publish output to {Path}", deployPath);
+                _logger.LogDebug("[dry-run] Would transfer publish output to {Path}", stagingPath);
             }
         });
+    }
+
+    private async Task ActivateReleaseAsync(Core.Models.DeployConfig config, string releaseId, bool dryRun, CancellationToken ct)
+    {
+        if (dryRun)
+        {
+            _logger.LogDebug("[dry-run] Would activate release {ReleaseId}", releaseId);
+            return;
+        }
+        var releasePath = $"/var/www/{config.App.Name}/releases/{releaseId}";
+        var currentLink = $"/var/www/{config.App.Name}/current";
+        // ln -sfn is atomic on Linux via rename(2) when source and target are on the same filesystem
+        await _ssh.ExecuteAsync($"ln -sfn {releasePath} {currentLink}", ct: ct);
     }
 
     // If the stored path isn't found relative to the current directory (e.g. user is in project

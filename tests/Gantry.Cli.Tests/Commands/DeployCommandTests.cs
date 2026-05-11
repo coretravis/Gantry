@@ -192,6 +192,43 @@ public class DeployCommandTests
         _logger.Messages.Should().Contain(m => m.Contains("[dry-run] Would run pre-deploy hook for plugin 'postgres'"));
     }
 
+    [Fact]
+    public async Task Deploy_ExtractsIntoReleasesDirectory_NotAppDirectory()
+    {
+        var sut = CreateSut(_ => Task.FromResult("abc1234"));
+
+        await sut.ExecuteAsync(".deploy.yml", dryRun: true);
+
+        _logger.Messages.Should().Contain(m =>
+            m.Contains("[dry-run] Would transfer publish output to") &&
+            m.Contains("/releases/"));
+    }
+
+    [Fact]
+    public async Task Deploy_CreatesCurrentSymlinkAfterExtraction()
+    {
+        var sut = CreateSut(_ => Task.FromResult("abc1234"));
+
+        await sut.ExecuteAsync(".deploy.yml", dryRun: true);
+
+        _logger.Messages.Should().Contain(m => m.Contains("[dry-run] Would activate release"));
+    }
+
+    [Fact]
+    public async Task Deploy_DoesNotCopyFilesForSnapshot()
+    {
+        var sut = CreateSut(_ => Task.FromResult("abc1234"));
+
+        await sut.ExecuteAsync(".deploy.yml", dryRun: true);
+
+        _ssh.Verify(
+            s => s.ExecuteAsync(
+                It.Is<string>(cmd => cmd.Contains("cp -r")),
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private sealed class CapturingLogger<T> : ILogger<T>
     {
         public List<string> Messages { get; } = new();
