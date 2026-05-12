@@ -32,7 +32,7 @@ public class CiCommandHandler
         var progress = new Progress<PhaseProgress>(p => ConsoleRenderer.ShowPhaseProgress(p));
         var context = new ProvisioningContext { Config = config, IsDryRun = dryRun, Progress = progress, CancellationToken = ct };
 
-        var skipAll = new[] { "connect-and-verify", "os-hardening", "runtime-installation", "web-server-configuration", "process-manager-setup", "ssl-provisioning", "config-persistence" };
+        var skipAll = new[] { "connect-and-verify", "os-hardening", "runtime-installation", "nginx-install", "nginx-site-config", "process-manager-setup", "ssl-provisioning", "config-persistence" };
 
         try
         {

@@ -38,7 +38,8 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IPhase, ConnectAndVerifyPhase>();
         services.AddTransient<IPhase, OsHardeningPhase>();
         services.AddTransient<IPhase, RuntimeInstallationPhase>();
-        services.AddTransient<IPhase, WebServerConfigurationPhase>();
+        services.AddTransient<IPhase, NginxInstallPhase>();
+        services.AddTransient<IPhase, NginxSiteConfigPhase>();
         services.AddTransient<IPhase, ProcessManagerSetupPhase>();
         services.AddTransient<IPhase, SslProvisioningPhase>();
         services.AddTransient<IPhase, CiGenerationPhase>();
