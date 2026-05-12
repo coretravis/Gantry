@@ -29,6 +29,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<EnvCommandHandler>();
         services.AddTransient<SandboxCommandHandler>();
         services.AddTransient<PluginCommandHandler>();
+        services.AddTransient<TeardownCommandHandler>();
 
         return services;
     }

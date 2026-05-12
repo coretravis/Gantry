@@ -247,6 +247,18 @@ pluginCommand.Subcommands.Add(pluginAddCmd);
 pluginCommand.Subcommands.Add(pluginRemoveCmd);
 rootCommand.Subcommands.Add(pluginCommand);
 
+// --- teardown ---
+var teardownCommand = new TeardownCommand();
+teardownCommand.SetAction(async (parseResult, ct) =>
+{
+    var handler = provider.GetRequiredService<TeardownCommandHandler>();
+    return await handler.ExecuteAsync(
+        parseResult.GetValue(configOption)!,
+        parseResult.GetValue(dryRunOption),
+        ct);
+});
+rootCommand.Subcommands.Add(teardownCommand);
+
 // --- sandbox ---
 var sandboxCommand = new SandboxCommand();
 var sandboxNameOption = new Option<string>("--name")
